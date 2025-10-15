@@ -1,0 +1,175 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>💼 Job Sequencing — Interactive (Greedy)</title>
+  <style>
+    :root{--bg:#0f172a;--card:#1e293b;--accent:#38bdf8;--muted:#94a3b8;--btn:#10b981}
+    body{font-family:Inter,Segoe UI,system-ui;min-height:100vh;background:var(--bg);color:#f8fafc;display:flex;align-items:flex-start;justify-content:center;padding:28px}
+    .container{width:980px}
+    h1{color:var(--accent);margin:0 0 12px}
+    .grid{display:grid;grid-template-columns:1fr 320px;gap:16px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,.6)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #334155;text-align:left}
+    th{color:#e6eef8}
+    input[type=text],input[type=number]{width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:transparent;color:inherit}
+    .controls{display:flex;gap:8px;margin-top:12px}
+    button{background:var(--btn);border:none;padding:10px 12px;border-radius:10px;color:white;cursor:pointer}
+    .muted{color:var(--muted);font-size:13px}
+    .result{margin-top:12px}
+    .small{font-size:13px}
+    .jobs-list{max-height:280px;overflow:auto}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .link-like{background:transparent;border:1px dashed #334155;color:var(--accent);padding:6px 8px;border-radius:8px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💼 Job Sequencing — Interactive (Greedy)</h1>
+    <div class="grid">
+      <div class="card">
+        <div class="jobs-list">
+          <table id="jobTable">
+            <thead>
+              <tr><th>Job ID</th><th>Deadline</th><th>Profit</th><th></th></tr>
+            </thead>
+            <tbody>
+              <!-- default rows -->
+            </tbody>
+          </table>
+        </div><div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <input id="jobId" type="text" placeholder="Job ID (e.g. J1)" />
+      <input id="deadline" type="number" min="1" placeholder="Deadline" />
+      <input id="profit" type="number" min="0" placeholder="Profit" />
+      <button id="addBtn">Add Job</button>
+    </div>
+
+    <div class="controls">
+      <button id="runBtn">Run Algorithm 🚀</button>
+      <button id="clearBtn" class="link-like">Clear All</button>
+      <button id="loadSample" class="link-like">Load Sample Data</button>
+      <button id="exportBtn" class="link-like">Export CSV</button>
+    </div>
+
+    <div id="message" class="muted small" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>📦 Result</h3>
+    <div class="result">
+      <p><strong>Scheduled Jobs:</strong> <span id="scheduledJobs">—</span></p>
+      <p><strong>Total Profit:</strong> ₹<span id="totalProfit">0</span></p>
+      <p class="small muted">Algorithm: sort by profit descending, place each job in latest free slot ≤ deadline</p>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #334155;margin:12px 0">
+    <h4>Tips</h4>
+    <ul class="muted small">
+      <li>Use unique Job IDs for clarity.</li>
+      <li>Deadlines are positive integers (time slots).</li>
+      <li>Profit is any non-negative number.</li>
+    </ul>
+
+    <div style="margin-top:12px" class="actions">
+      <button id="copyBtn" class="link-like">Copy Result</button>
+      <button id="downloadHtml" class="link-like">Download HTML</button>
+    </div>
+  </div>
+</div>
+
+  </div>  <script>
+    const tbody = document.querySelector('#jobTable tbody');
+    const jobIdInput = document.getElementById('jobId');
+    const deadlineInput = document.getElementById('deadline');
+    const profitInput = document.getElementById('profit');
+    const message = document.getElementById('message');
+
+    function createRow(id, d, p){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${id}</td><td>${d}</td><td>${p}</td><td><button class=\"remove\">✖</button></td>`;
+      tbody.appendChild(tr);
+      tr.querySelector('.remove').addEventListener('click', ()=>{tr.remove();});
+    }
+
+    document.getElementById('addBtn').addEventListener('click', ()=>{
+      const id = jobIdInput.value.trim();
+      const d = Number(deadlineInput.value);
+      const p = Number(profitInput.value);
+      if(!id || !d || isNaN(p)){
+        message.textContent = 'Please provide Job ID, Deadline (≥1) and Profit.';return;
+      }
+      createRow(id,d,p);
+      jobIdInput.value='';deadlineInput.value='';profitInput.value='';message.textContent='';
+    });
+
+    document.getElementById('loadSample').addEventListener('click', ()=>{
+      tbody.innerHTML='';
+      createRow('J1',2,100);
+      createRow('J2',1,19);
+      createRow('J3',2,27);
+      createRow('J4',1,25);
+      createRow('J5',3,15);
+      message.textContent='Sample data loaded.';
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', ()=>{tbody.innerHTML='';message.textContent='Cleared all jobs.'});
+
+    function readJobsFromTable(){
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      return rows.map(r=>{
+        const [id,d,p] = Array.from(r.querySelectorAll('td')).slice(0,3).map(td=>td.textContent.trim());
+        return {job_id:id, deadline: Number(d), profit: Number(p)};
+      });
+    }
+
+    function runJobSequencing(){
+      const jobs = readJobsFromTable();
+      if(jobs.length===0){message.textContent='No jobs to schedule.';return}
+      // sort by profit desc
+      jobs.sort((a,b)=>b.profit - a.profit);
+      const maxDeadline = Math.max(...jobs.map(j=>j.deadline));
+      const result = Array(maxDeadline).fill(null);
+      const slot = Array(maxDeadline).fill(false);
+      let totalProfit = 0;
+      for(const job of jobs){
+        for(let j=Math.min(maxDeadline, job.deadline)-1; j>=0; j--){
+          if(!slot[j]){slot[j]=true;result[j]=job;totalProfit+=job.profit;break}
+        }
+      }
+      const scheduled = result.filter(Boolean).map(j=>j.job_id);
+      document.getElementById('scheduledJobs').textContent = scheduled.join(', ') || '—';
+      document.getElementById('totalProfit').textContent = totalProfit;
+      message.textContent = `Scheduled ${scheduled.length} job(s).`;
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runJobSequencing);
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const jobs = readJobsFromTable();
+      if(jobs.length===0){message.textContent='No data to export.';return}
+      const csv = ['job_id,deadline,profit', ...jobs.map(j=>`${j.job_id},${j.deadline},${j.profit}`)].join('\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='jobs.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', ()=>{
+      const scheduled = document.getElementById('scheduledJobs').textContent;
+      const profit = document.getElementById('totalProfit').textContent;
+      navigator.clipboard.writeText(`Scheduled: ${scheduled}\nTotal Profit: ₹${profit}`)
+        .then(()=>{message.textContent='Result copied to clipboard.'})
+        .catch(()=>{message.textContent='Could not copy (browser restrictions).'});
+    });
+
+    document.getElementById('downloadHtml').addEventListener('click', ()=>{
+      const html = `<!doctype html>\n${document.documentElement.outerHTML}`;
+      const blob = new Blob([html], {type:'text/html'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='job-sequencing.html'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // load defaults on open
+    document.getElementById('loadSample').click();
+  </script></body>
